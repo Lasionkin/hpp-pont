@@ -1,0 +1,18 @@
+# Outils interdits a Claude par le pont HPP, un nom par ligne.
+# Arretent ou redemarrent le demon partage avec ChatGPT :
+browser_stop
+browser_restart
+# Ferme une fenetre sans dire laquelle : a ferme la console du demon le 17 septembre 2026
+# et le pilotage est parti dans la barre d'adresse. La reparation passe par hpp_reparer.
+browser_window_close
+# Effacent ou remplacent les connexions des comptes (Google, Instagram, TikTok) :
+browser_cookies_clear
+browser_cookies_load
+browser_storage_clear
+browser_storage_remove
+browser_session_load
+browser_session_delete
+browser_profile_load
+browser_profile_delete
+browser_auth_load
+browser_auth_delete
