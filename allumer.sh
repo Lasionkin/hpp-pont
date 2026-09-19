@@ -33,6 +33,14 @@ ecran_present() {
     || pgrep -f "Xvfb.*:$N" >/dev/null
 }
 veilleur_vivant() { [ -f "$D/veilleur.pid" ] && kill -0 "$(cat "$D/veilleur.pid")" 2>/dev/null; }
+tunnel_vivant()   { [ -f "$D/cf.pid" ] && kill -0 "$(cat "$D/cf.pid")" 2>/dev/null && [ -f "$D/adresse.txt" ]; }
+# Un ecran qui existe ne prouve pas que Firefox est dessus. Un fond noir avec un
+# curseur en forme de croix, c'est la racine de X toute nue : l'ecran est la, le
+# navigateur est ailleurs. Seule une fenetre reellement presente tranche.
+firefox_sur_ecran() {
+  command -v xdotool >/dev/null 2>&1 || return 0
+  [ -n "$(DISPLAY="$E" xdotool search --class firefox 2>/dev/null | head -n 1)" ]
+}
 
 etat() {
   echo "ETAT DU NAVIGATEUR HPP"
@@ -89,12 +97,6 @@ demarrer_xvfb() {
 reparer_ecran() {
   if ! ecran_present; then
     demarrer_xvfb || return 1
-    # Firefox a demarre sans ecran : il faut relancer le pont avec DISPLAY defini
-    # pour qu'il s'y rattache. Les sessions ouvertes survivent, elles vivent dans
-    # le profil sur le disque, pas dans le processus.
-    attend "rattachement de Firefox a l'ecran, les sessions ouvertes sont conservees"
-    DISPLAY="$E" bash "$ICI/relancer.sh" 2>&1 | detail
-    for i in $(seq 1 30); do pont_repond && break; sleep 1; done
   fi
   if ! command -v x11vnc >/dev/null 2>&1; then
     rouge "x11vnc n'est pas installe."
@@ -115,6 +117,23 @@ reparer_ecran() {
   return 1
 }
 
+# Rattache Firefox a l'ecran. Mesure du 19 septembre 2026 : relancer.sh refuse de
+# travailler si le tunnel n'est pas deja leve, et demarrer.sh refuse si le pont
+# tourne encore. Il faut donc choisir la bonne porte, sinon Firefox reste aveugle
+# et l'ecran reste noir avec sa croix.
+rattacher_firefox() {
+  attend "rattachement de Firefox a l'ecran, les sessions ouvertes sont conservees"
+  export DISPLAY="$E"
+  if tunnel_vivant; then
+    bash "$ICI/relancer.sh" 2>&1 | detail
+  else
+    bash "$ICI/arreter.sh" >/dev/null 2>&1
+    bash "$ICI/demarrer.sh" 2>&1 | detail
+  fi
+  for i in $(seq 1 60); do pont_repond && break; sleep 1; done
+  for i in $(seq 1 20); do firefox_sur_ecran && break; sleep 1; done
+}
+
 if [ "${1:-}" = "--etat" ]; then etat; exit 0; fi
 
 if [ "${1:-}" = "--froid" ]; then
@@ -126,6 +145,16 @@ fi
 
 echo "Allumage du navigateur HPP."
 command -v termux-wake-lock >/dev/null && termux-wake-lock
+
+# L'ecran d'abord. S'il naît avant le pont, Firefox naît dessus et rien n'a besoin
+# d'etre relance ensuite. C'est l'ordre qui manquait.
+ecran_neuf=0
+pont_etait_vivant=0
+pont_repond && pont_etait_vivant=1
+if ! ecran_present; then
+  demarrer_xvfb && ecran_neuf=1
+fi
+ecran_present && export DISPLAY="$E"
 
 if veilleur_vivant; then
   vert "veilleur deja en marche"
@@ -146,10 +175,35 @@ else
   tail -n 12 "$D/veilleur.log" 2>/dev/null | detail
 fi
 
+# Firefox etait deja ne aveugle : il faut le faire renaitre sur l'ecran neuf.
+if [ "$ecran_neuf" = "1" ] && [ "$pont_etait_vivant" = "1" ]; then
+  rattacher_firefox
+fi
+
 if vnc_repond && ecran_present; then
-  vert "ecran deja visible"
+  vert "affichage diffuse sur 127.0.0.1:$V"
 else
-  reparer_ecran && vert "ecran visible sur 127.0.0.1:$V"
+  reparer_ecran && vert "affichage diffuse sur 127.0.0.1:$V"
+fi
+
+# Le controle qui manquait : un ecran noir avec une croix passe tous les tests
+# precedents. Celui-ci ne se laisse pas tromper.
+if ecran_present; then
+  if firefox_sur_ecran; then
+    vert "Firefox est bien SUR l'ecran, l'image doit etre la"
+  else
+    rouge "l'ecran existe mais Firefox n'est pas dessus"
+    echo "          C'est le fond noir avec le curseur en croix : la racine de X toute nue."
+    attend "nouvelle tentative de rattachement"
+    rattacher_firefox
+    if firefox_sur_ecran; then
+      vert "Firefox rattache, l'image doit etre la maintenant"
+    else
+      rouge "Firefox refuse de se rattacher a $E"
+      echo "          Dernieres lignes du serveur MCP :"
+      tail -n 15 "$D/enfant.stderr.log" 2>/dev/null | detail
+    fi
+  fi
 fi
 
 echo
