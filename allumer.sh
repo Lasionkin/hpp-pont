@@ -133,16 +133,30 @@ else
   tail -n 12 "$D/veilleur.log" 2>/dev/null | detail
 fi
 
-# Le demon cree son ecran en demarrant Firefox. On lui laisse le temps, puis on
-# lui demande lequel c'est au lieu de le supposer.
-attend "attente de l'ecran cree par le demon"
-ECRAN=""
-for i in $(seq 1 40); do ECRAN="$(ecran_du_demon || true)"; [ -n "$ECRAN" ] && break; sleep 1; done
+# LE POINT QUI MANQUAIT, mesure du 19 septembre 2026 : le demon ne demarre le
+# navigateur qu'a la PREMIERE COMMANDE recue. Tant que personne ne lui demande
+# rien, il n'y a ni Firefox ni ecran, et c'est normal. Il faut donc le reveiller.
+ECRAN="$(ecran_du_demon || true)"
 if [ -z "$ECRAN" ]; then
-  rouge "le demon n'a cree aucun ecran virtuel"
-  echo "          C'est lui qui doit le creer, pas nous. Si le probleme persiste,"
-  echo "          la cause est dans le demarrage du navigateur. Dernieres lignes :"
-  tail -n 20 "$D/enfant.stderr.log" 2>/dev/null | detail
+  if command -v tbp >/dev/null 2>&1; then
+    attend "reveil du navigateur, le demon ne le demarre qu'a la premiere commande"
+    timeout 60 tbp start 2>&1 | detail
+  else
+    attend "reveil du navigateur"
+  fi
+  for i in $(seq 1 45); do ECRAN="$(ecran_du_demon || true)"; [ -n "$ECRAN" ] && break; sleep 1; done
+fi
+if [ -z "$ECRAN" ]; then
+  rouge "aucun ecran virtuel, le navigateur n'a pas ete reveille"
+  echo "          Ce n'est pas une panne : le demon ne demarre Firefox qu'a la"
+  echo "          premiere commande recue. Demandez n'importe quoi a Claude, par"
+  echo "          exemple d'ouvrir une page, puis retapez : allume"
+  echo "          Le veilleur allumera l'affichage tout seul dans les 30 secondes"
+  echo "          qui suivent la naissance de l'ecran."
+  if command -v tbp >/dev/null 2>&1; then
+    echo "          Dernieres lignes du serveur MCP :"
+    tail -n 20 "$D/enfant.stderr.log" 2>/dev/null | detail
+  fi
   echo
   etat
   exit 1
