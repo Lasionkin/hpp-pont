@@ -6,10 +6,13 @@ sans fichier temporaire, et il est envoye directement au champ qui a le focus da
 Firefox sur l'ecran virtuel. Il ne transite par aucun modele, aucun journal, aucun
 reseau. Claude peut demander la saisie, il ne peut pas la lire.
 
-  python saisir.py                 tape le texte, puis Entree
+  python saisir.py                 tape le texte cache, puis Entree
+  python saisir.py --voir          affiche le texte pendant que tu le tapes
   python saisir.py --sans-entree   tape le texte, sans valider
   python saisir.py --tab           tape le texte puis Tab, pour passer au champ suivant
   python saisir.py --verifier      dit seulement si l'ecran virtuel repond
+
+Le texte est efface de l'ecran du telephone des qu'il est envoye, meme avec --voir.
 """
 import getpass, os, sys, time
 
@@ -91,9 +94,14 @@ def main():
         print(f"Ecran {AFFICHAGE} joignable. Le champ qui a le focus dans Firefox recevra la saisie.")
         return
 
-    print("Le texte ne s'affichera pas et ne sera garde nulle part.")
+    voir = "--voir" in sys.argv
+    if voir:
+        print("MODE VISIBLE : le texte s'affichera pendant que tu le tapes.")
+        print("Il sera efface de l'ecran des qu'il sera envoye.")
+    else:
+        print("Le texte ne s'affichera pas et ne sera garde nulle part.")
     print("Il part directement dans le champ qui a le focus dans Firefox.")
-    texte = getpass.getpass("Texte a taper : ")
+    texte = input("Texte a taper : ") if voir else getpass.getpass("Texte a taper : ")
     if not texte:
         print("Rien a taper.")
         return
@@ -121,6 +129,10 @@ def main():
         touche_nommee(d, "Return")
 
     del texte
+    if voir:
+        # On efface la ligne qui portait le texte, pour qu'elle ne reste pas a l'ecran.
+        sys.stdout.write("\033[F\033[2K")
+        sys.stdout.flush()
     print(f"Saisi : {'*' * 8}. Rien n'a ete conserve.")
 
 
