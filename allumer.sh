@@ -54,35 +54,64 @@ etat() {
 
 # Repare l'ecran et, surtout, MONTRE pourquoi quand ca rate.
 # Un script qui cache la cause d'un echec fait perdre un tour a celui qui le lit.
+#
+# LE MAILLON QUI MANQUAIT, trouve le 19 septembre 2026 : personne ne lancait Xvfb.
+# ecran.sh renvoyait vers relancer.sh, et relancer.sh ne relance que le pont.
+# Firefox demarrait donc sans ecran, pilotable mais invisible, et la saisie au
+# clavier etait impossible faute d'ecran ou taper.
+demarrer_xvfb() {
+  if ! command -v Xvfb >/dev/null 2>&1; then
+    rouge "Xvfb n'est pas installe. C'est LA cause de l'ecran noir."
+    echo "          Firefox tourne sans ecran : pilotable, mais invisible, et"
+    echo "          aucune frappe clavier n'est possible tant qu'il manque."
+    echo "          Une seule ligne repare, puis retapez allume :"
+    echo
+    echo "              pkg install -y x11-repo && pkg install -y xorg-server-xvfb x11vnc xdotool"
+    echo
+    return 1
+  fi
+  attend "demarrage de l'ecran virtuel $E"
+  local res
+  res="${HPP_RESOLUTION:-1920x1080x24}"
+  nohup Xvfb "$E" -screen 0 "$res" -nolisten tcp > "$D/xvfb.log" 2>&1 &
+  echo $! > "$D/xvfb.pid"
+  for i in $(seq 1 20); do ecran_present && break; sleep 1; done
+  if ! ecran_present; then
+    rouge "Xvfb n'a pas demarre"
+    echo "          Journal de Xvfb, c'est la que la cause est ecrite :"
+    tail -n 15 "$D/xvfb.log" 2>/dev/null | detail
+    return 1
+  fi
+  vert "ecran virtuel $E cree en $res"
+  return 0
+}
+
 reparer_ecran() {
+  if ! ecran_present; then
+    demarrer_xvfb || return 1
+    # Firefox a demarre sans ecran : il faut relancer le pont avec DISPLAY defini
+    # pour qu'il s'y rattache. Les sessions ouvertes survivent, elles vivent dans
+    # le profil sur le disque, pas dans le processus.
+    attend "rattachement de Firefox a l'ecran, les sessions ouvertes sont conservees"
+    DISPLAY="$E" bash "$ICI/relancer.sh" 2>&1 | detail
+    for i in $(seq 1 30); do pont_repond && break; sleep 1; done
+  fi
   if ! command -v x11vnc >/dev/null 2>&1; then
-    rouge "x11vnc n'est pas installe sur ce telephone."
-    echo "          C'est la cause, et elle se repare en une ligne :"
+    rouge "x11vnc n'est pas installe."
+    echo "          L'ecran existe mais rien ne le diffuse. Une ligne repare :"
     echo
     echo "              pkg install -y x11vnc"
     echo
     echo "          Puis retapez : allume"
     return 1
   fi
-  if ! ecran_present; then
-    attend "l'ecran virtuel $E n'existe pas, relance du pilote"
-    bash "$ICI/relancer.sh" 2>&1 | detail
-    for i in $(seq 1 25); do ecran_present && break; sleep 1; done
-  fi
-  if ! ecran_present; then
-    rouge "l'ecran virtuel $E n'existe toujours pas apres relance"
-    echo "          Dernieres lignes du journal du veilleur :"
-    tail -n 12 "$D/veilleur.log" 2>/dev/null | detail
-    return 1
-  fi
-  attend "reparation de l'affichage"
+  attend "diffusion de l'affichage"
   bash "$ICI/ecran.sh" 2>&1 | detail
   for i in $(seq 1 15); do vnc_repond && break; sleep 1; done
   vnc_repond && return 0
   rouge "l'ecran ne repond toujours pas sur $V"
-  echo "          Journal de x11vnc, les 15 dernieres lignes, c'est la que la cause est ecrite :"
+  echo "          Journal de x11vnc, les 15 dernieres lignes :"
   tail -n 15 "$D/x11vnc.log" 2>/dev/null | detail
-  echo "          Copiez ces lignes a Claude, il n'a pas acces a ce fichier autrement."
   return 1
 }
 
@@ -117,7 +146,11 @@ else
   tail -n 12 "$D/veilleur.log" 2>/dev/null | detail
 fi
 
-if vnc_repond; then vert "ecran deja visible"; else reparer_ecran && vert "ecran visible"; fi
+if vnc_repond && ecran_present; then
+  vert "ecran deja visible"
+else
+  reparer_ecran && vert "ecran visible sur 127.0.0.1:$V"
+fi
 
 echo
 etat
