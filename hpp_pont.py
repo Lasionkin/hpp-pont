@@ -51,7 +51,10 @@ OUTIL_REPARER = {
     "inputSchema": {"type": "object", "properties": {}},
 }
 MIMES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
-HOSTED_CALLBACKS = {"https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback"}
+# 26/09/2026 : ajout du connecteur de Boston, le Chef d'equipe (agent.meta.ai),
+# approuve par Seigneur Enock. Le code d'approbation reste le seul verrou.
+HOSTED_CALLBACKS = {"https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback",
+                      "https://agent.meta.ai/api/hatch/oauth/callback"}
 
 _lock = threading.RLock()
 _ecran_lock = threading.RLock()
