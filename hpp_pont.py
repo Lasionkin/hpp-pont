@@ -759,22 +759,43 @@ class H(BaseHTTPRequestHandler):
 
     def token(self):
         ctype = self.headers.get("Content-Type", "")
-        if "application/x-www-form-urlencoded" not in ctype:
+        # 26/09/2026 : certains clients OAuth envoient du JSON au lieu du
+        # formulaire classique. On l'accepte, sans rien affaiblir.
+        if "application/json" in ctype:
+            try:
+                j = json.loads(self.body().decode("utf-8", "replace"))
+                f = {k: str(v) for k, v in j.items()} if isinstance(j, dict) else {}
+            except (ValueError, TypeError):
+                f = {}
+            log("token: corps JSON recu")
+        elif "application/x-www-form-urlencoded" in ctype:
+            f = self.form()
+        else:
+            log(f"token refuse: content-type inattendu ({ctype[:60]})")
             return self.oauth_err(400, "invalid_request", "form-urlencoded attendu")
-        f = self.form()
         with _lock:
             st = load()
             purge(st)
             gt = f.get("grant_type")
             if gt == "authorization_code":
                 rec = st["codes"].pop(h(f.get("code", "")), None)
-                if not rec or rec["cid"] != f.get("client_id") or rec["uri"] != f.get("redirect_uri"):
+                if not rec:
                     save(st)
+                    log("token refuse: code inconnu ou deja utilise")
+                    return self.oauth_err(400, "invalid_grant", "code invalide")
+                if rec["cid"] != f.get("client_id"):
+                    save(st)
+                    log("token refuse: client_id different de celui du code")
+                    return self.oauth_err(400, "invalid_grant", "code invalide")
+                if rec["uri"] != f.get("redirect_uri"):
+                    save(st)
+                    log(f"token refuse: redirect_uri different (recu: {(f.get('redirect_uri') or '')[:70]})")
                     return self.oauth_err(400, "invalid_grant", "code invalide")
                 ver = f.get("code_verifier", "")
                 calc = base64.urlsafe_b64encode(hashlib.sha256(ver.encode()).digest()).rstrip(b"=").decode()
                 if not ver or not hmac.compare_digest(calc, rec["chal"]):
                     save(st)
+                    log("token refuse: PKCE ne correspond pas")
                     return self.oauth_err(400, "invalid_grant", "PKCE invalide")
                 out = self.issue(st, rec["cid"])
             elif gt == "refresh_token":
