@@ -55,6 +55,31 @@ while true; do
     bash "$ICI/relancer.sh" >> "$L" 2>&1
   fi
 
+  # 5. Tunnel zombie, panne du 26 septembre 2026 : le processus cloudflared vit
+  #    mais le tunnel ne passe plus (connexion QUIC morte cote Cloudflare).
+  #    Le /sante local repond, donc les tests 3 et 4 ne voient rien.
+  #    Seul un appel par l'adresse publique le revele. Deux echecs de suite
+  #    (60 secondes d'intervalle) avant de redemarrer, pour ne pas surréagir
+  #    a un hoquet passager de Cloudflare.
+  Z="$D/zombie.compteur"
+  if vivant pont && curl -fsS --max-time 8 http://127.0.0.1:"${HPP_PONT_PORT:-8765}"/sante >/dev/null 2>&1; then
+    if curl -fsS --max-time 10 -A "Mozilla/5.0" https://hpp.royalkelo.com/sante >/dev/null 2>&1; then
+      rm -f "$Z"
+    else
+      n=$(($(cat "$Z" 2>/dev/null || echo 0) + 1))
+      echo "$n" > "$Z"
+      journal "tunnel suspect : adresse publique muette ($n/2), local OK"
+      if [ "$n" -ge 2 ]; then
+        journal "tunnel zombie confirme : redemarrage complet"
+        rm -f "$Z"
+        bash "$ICI/arreter.sh" >> "$L" 2>&1
+        bash "$ICI/demarrer.sh" >> "$L" 2>&1
+      fi
+    fi
+  else
+    rm -f "$Z"
+  fi
+
   tail -n 400 "$L" > "$L.tmp" 2>/dev/null && mv "$L.tmp" "$L"
   sleep "${HPP_VEILLE_SECONDES:-30}"
 done
