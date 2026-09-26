@@ -9,7 +9,7 @@
 set -u
 DEPOT="https://raw.githubusercontent.com/Lasionkin/hpp-pont/main"
 DEST="$HOME/hpp-pont"
-FICHIERS="hpp_pont.py demarrer.sh relancer.sh arreter.sh etat.sh bloques.txt clavier_hpp.py ecran.sh royal.sh veilleur.sh installer_auto.sh tunnel_fixe.sh reinstaller.sh"
+FICHIERS="hpp_pont.py allumer.sh demarrer.sh relancer.sh arreter.sh etat.sh bloques.txt clavier_hpp.py ecran.sh royal.sh veilleur.sh installer_auto.sh tunnel_fixe.sh reinstaller.sh"
 echec=0
 
 titre() { echo; echo "=== $* ==="; }
