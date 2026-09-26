@@ -53,6 +53,31 @@ OUTIL_REPARER = {
     "inputSchema": {"type": "object", "properties": {}},
 }
 MIMES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
+# 26/09/2026 : outil termux_exec — permet a Boston, le Chef d'equipe, d'executer
+# directement des commandes shell dans le Termux de Seigneur Enock, sans copier-coller.
+# Le Bearer OAuth du pont (cle creee par --cle-boston) reste le seul verrou :
+# l'outil passe par mcp(), donc par authed(), comme tous les autres outils.
+# Garde-fous : journal de chaque appel, timeout plafonne a 300 s, sortie limitee a 16 Ko.
+OUTIL_TERMUX_EXEC = {
+    "name": "termux_exec",
+    "description": ("Execute une commande shell dans le Termux du telephone de Seigneur Enock et renvoie "
+                    "stdout+stderr fusionnes. Reserve a Boston, le Chef d'equipe : chaque appel est "
+                    "journalise dans ~/.hpp-pont/termux-exec.log (horodatage, commande, code de sortie, "
+                    "duree, timeout). Le delai est plafonne a 300 secondes, la sortie a 16 Ko."),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "commande": {"type": "string",
+                         "description": "Commande shell a executer dans le Termux du telephone."},
+            "delai": {"type": "number", "default": 60,
+                      "description": "Delai maximum en secondes (defaut 60, plafonne a 300)."},
+        },
+        "required": ["commande"],
+    },
+}
+JOURNAL_TERMUX_EXEC = "termux-exec.log"
+SORTIE_MAX = 16384  # 16 Ko
+DELAI_MAX = 300
 # 26/09/2026 : ajout du connecteur de Boston, le Chef d'equipe (agent.meta.ai),
 # approuve par Seigneur Enock. Le code d'approbation reste le seul verrou.
 HOSTED_CALLBACKS = {"https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback",
@@ -177,6 +202,47 @@ def redirect_ok(uri):
 
 
 # ---------------------------------------------------------------- processus MCP stdio
+def executer_termux(commande, delai):
+    """Execute une commande shell dans le Termux du telephone.
+
+    Chaque appel est journalise dans ~/.hpp-pont/termux-exec.log.
+    stdout et stderr sont fusionnes, la sortie est limitee a SORTIE_MAX octets.
+    Rend un dict : {"code_sortie", "sortie", "delai_depasse", "duree_s"}.
+    """
+    os.makedirs(HOME, exist_ok=True)
+    try:
+        delai = float(delai)
+    except (TypeError, ValueError):
+        delai = 60.0
+    delai = min(max(delai, 1.0), float(DELAI_MAX))
+    debut = time.monotonic()
+    delai_depasse = False
+    try:
+        p = subprocess.run(commande, shell=True, capture_output=True, timeout=delai)
+        sortie = p.stdout + p.stderr
+        code = p.returncode
+    except subprocess.TimeoutExpired as e:
+        delai_depasse = True
+        sortie = (e.stdout or b"") + (e.stderr or b"")
+        code = 124
+    except OSError as e:
+        sortie = str(e).encode("utf-8", "replace")
+        code = 127
+    duree = time.monotonic() - debut
+    texte = sortie.decode("utf-8", "replace")
+    tronque = len(sortie) > SORTIE_MAX
+    if tronque:
+        texte = texte[:SORTIE_MAX] + "\n[tronque]"
+    with _lock:
+        with open(os.path.join(HOME, JOURNAL_TERMUX_EXEC), "a") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} commande={commande!r} "
+                    f"code={code} timeout={delai_depasse} duree={duree:.2f}s "
+                    f"tronque={tronque}\n")
+    log(f"termux_exec: code={code} timeout={delai_depasse} duree={duree:.2f}s")
+    return {"code_sortie": code, "sortie": texte, "delai_depasse": delai_depasse,
+            "duree_s": round(duree, 2)}
+
+
 class Enfant:
     def __init__(self, cmd, bloques=()):
         self.cmd = cmd
@@ -453,6 +519,17 @@ class Enfant:
                 rapport = f"La reparation a echoue : {e}"
             return {"jsonrpc": "2.0", "id": msg["id"],
                     "result": {"content": [{"type": "text", "text": rapport}]}}
+        # termux_exec ne passe pas par le navigateur : interception avant ensure().
+        # L'authentification Bearer est deja verifiee en amont par mcp()/authed().
+        if method == "tools/call" and (msg.get("params") or {}).get("name") == OUTIL_TERMUX_EXEC["name"]:
+            args = (msg.get("params") or {}).get("arguments") or {}
+            commande = args.get("commande")
+            if not isinstance(commande, str) or not commande.strip():
+                return {"jsonrpc": "2.0", "id": msg["id"], "result": {"isError": True, "content": [
+                    {"type": "text", "text": "L'argument 'commande' est obligatoire et non vide."}]}}
+            resultat = executer_termux(commande, args.get("delai", 60))
+            return {"jsonrpc": "2.0", "id": msg["id"],
+                    "result": {"content": [{"type": "text", "text": json.dumps(resultat, ensure_ascii=False)}]}}
         self.ensure()
         if method == "initialize":
             return {"jsonrpc": "2.0", "id": msg["id"], "result": self.init_result}
@@ -495,6 +572,8 @@ class Enfant:
             outils = r["result"].setdefault("tools", [])
             if not any(t.get("name") == OUTIL_REPARER["name"] for t in outils):
                 outils.append(dict(OUTIL_REPARER))
+            if not any(t.get("name") == OUTIL_TERMUX_EXEC["name"] for t in outils):
+                outils.append(dict(OUTIL_TERMUX_EXEC))
         if capture and "result" in r:
             joindre_image(r["result"])
             if isinstance(etat, dict) and etat.get("v") != "visible":
