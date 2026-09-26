@@ -60,6 +60,22 @@ retirer_notre_xvfb() {
   rm -f "$D/xvfb.pid"
 }
 
+# Verrou mort de termux-browser-pilot, panne du 26 septembre 2026 : quand une
+# session du navigateur meurt brutalement (reboot, Termux tue), elle laisse
+# $PREFIX/tmp/.tbp_browser.lock avec un PID mort. Le demon refuse alors de
+# demarrer : "Another browser session is running". On retire le verrou
+# seulement si le PID qu'il contient est vraiment mort, jamais sinon.
+retirer_verrou_mort_tbp() {
+  local f="$PREFIX/tmp/.tbp_browser.lock" pid
+  [ -f "$f" ] || return 0
+  pid="$(cat "$f" 2>/dev/null)"
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+  attend "retrait du verrou mort du pilote (PID $pid)"
+  rm -f "$f"
+}
+
 manque_un_paquet() {
   local manquants=""
   for p in firefox Xvfb xdotool xclip openbox; do
@@ -140,6 +156,7 @@ ECRAN="$(ecran_du_demon || true)"
 if [ -z "$ECRAN" ]; then
   if command -v tbp >/dev/null 2>&1; then
     attend "reveil du navigateur, le demon ne le demarre qu'a la premiere commande"
+    retirer_verrou_mort_tbp
     timeout 60 tbp start 2>&1 | detail
   else
     attend "reveil du navigateur"
