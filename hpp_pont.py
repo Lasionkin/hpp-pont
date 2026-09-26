@@ -8,6 +8,8 @@ Usage:
   python hpp_pont.py --set-pin            # choisir le code d'approbation (saisie masquee)
   python hpp_pont.py -- tbp-mcp           # lancer le pont devant la commande donnee
   python hpp_pont.py --revoke-all         # invalider tous les jetons emis
+  python hpp_pont.py --cle-boston         # creer une cle d'acces directe pour Boston (365 jours)
+  python hpp_pont.py --revoquer-cle NOM   # revoquer la cle nommee
 """
 import argparse, base64, getpass, hashlib, hmac, html, json, os, secrets, socket, subprocess
 import signal, sys, threading, time, urllib.parse
@@ -856,6 +858,10 @@ def main():
                     help="outils interdits, separes par des virgules")
     ap.add_argument("--set-pin", action="store_true")
     ap.add_argument("--revoke-all", action="store_true")
+    ap.add_argument("--cle-boston", action="store_true",
+                    help="creer une cle d'acces directe pour Boston (validite 365 jours)")
+    ap.add_argument("--revoquer-cle", metavar="NOM", default="",
+                    help="revoquer la cle d'acces nommee")
     ap.add_argument("cmd", nargs=argparse.REMAINDER)
     a = ap.parse_args()
     os.makedirs(HOME, mode=0o700, exist_ok=True)
@@ -878,6 +884,29 @@ def main():
             st["access"], st["refresh"], st["codes"] = {}, {}, {}
             save(st)
         print("Tous les jetons sont revoques.")
+        return
+    if a.cle_boston:
+        # 26/09/2026 : cle directe pour Boston. La page de connexion hebergee
+        # ne revenait jamais chercher son jeton ; cette cle contourne ce
+        # blocage. A copier dans la page securisee du coffre, jamais dans le chat.
+        with _lock:
+            st = load()
+            tok = secrets.token_urlsafe(32)
+            st["access"][h(tok)] = {"cid": "cle-boston", "nom": "boston",
+                                   "exp": time.time() + 365 * 86400}
+            save(st)
+        print("Cle creee (validite 365 jours). Copiez-la MAINTENANT dans le coffre :")
+        print(tok)
+        print("Elle ne sera plus affichee. Pour la revoquer : python hpp_pont.py --revoquer-cle boston")
+        return
+    if a.revoquer_cle:
+        with _lock:
+            st = load()
+            morts = [k for k, v in st["access"].items() if v.get("nom") == a.revoquer_cle]
+            for k in morts:
+                del st["access"][k]
+            save(st)
+        print(f"{len(morts)} cle(s) revoquee(s).")
         return
     cmd = a.cmd[1:] if a.cmd[:1] == ["--"] else a.cmd
     if not cmd:
