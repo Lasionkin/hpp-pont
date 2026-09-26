@@ -673,9 +673,27 @@ class H(BaseHTTPRequestHandler):
 
     def check_authz(self, q):
         st = load()
-        c = st["clients"].get(q.get("client_id", ""))
+        cid = q.get("client_id", "")
+        c = st["clients"].get(cid)
         if not c:
-            return None, "client inconnu"
+            # 26/09/2026 : la page d'approbation d'agent.meta.ai n'enregistre pas
+            # son client a l'avance (pas de DCR). On l'inscrit a la volee quand
+            # son adresse de retour est dans la liste autorisee. Le code PIN
+            # reste obligatoire : rien n'est affaibli.
+            uri = q.get("redirect_uri", "")
+            if cid and uri in HOSTED_CALLBACKS and q.get("response_type") == "code" \
+                    and q.get("code_challenge_method") == "S256" and q.get("code_challenge"):
+                with _lock:
+                    st = load()
+                    st["clients"][cid] = {"name": "client-heberge", "uris": [uri], "t": time.time()}
+                    if len(st["clients"]) > 200:
+                        keep = sorted(st["clients"].items(), key=lambda kv: kv[1]["t"])[-200:]
+                        st["clients"] = dict(keep)
+                    save(st)
+                c = st["clients"][cid]
+                log(f"client heberge inscrit a la volee: {uri}")
+            else:
+                return None, "client inconnu"
         if q.get("redirect_uri") not in c["uris"]:
             return None, "adresse de retour non enregistree"
         if q.get("response_type") != "code":
