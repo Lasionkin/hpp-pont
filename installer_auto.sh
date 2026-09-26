@@ -23,6 +23,21 @@ if [ -x "$ICI/royal.sh" ]; then
 else
   echo "royal.sh absent ou non executable, commande royal non installee"
 fi
+
+# Commande "allume" : un seul mot pour remettre le navigateur HPP en marche.
+# allumer.sh ne supporte pas un lien symbolique ($0 pointerait vers $PREFIX/bin
+# et il ne trouverait plus ses scripts voisins), d'ou ce petit lanceur qui
+# garde le vrai chemin, fige a l'installation.
+if [ -x "$ICI/allumer.sh" ]; then
+  cat > "$PREFIX/bin/allume" <<FIN
+#!/data/data/com.termux/files/usr/bin/bash
+exec bash "$ICI/allumer.sh" "\$@"
+FIN
+  chmod +x "$PREFIX/bin/allume"
+  echo "Commande allume installee : $PREFIX/bin/allume"
+else
+  echo "allumer.sh absent ou non executable, commande allume non installee"
+fi
 nohup bash "$ICI/veilleur.sh" >/dev/null 2>&1 &
 sleep 2
 if [ -f "$HOME/.hpp-pont/veilleur.pid" ] && kill -0 "$(cat "$HOME/.hpp-pont/veilleur.pid")" 2>/dev/null; then
