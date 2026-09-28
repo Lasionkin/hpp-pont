@@ -38,6 +38,17 @@ while true; do
 
   # 2. Clavier : les touches a majuscule sautent apres chaque redemarrage de l'ecran.
   python "$ICI/clavier_hpp.py" --si-besoin 2>&1 | sed "s/^/$(date '+%F %T') clavier : /" >> "$L"
+  python "$ICI/accents_hpp.py" --si-besoin 2>&1 | sed "s/^/$(date '+%F %T') accents : /" >> "$L"
+  if [ ${PIPESTATUS[0]} -ne 0 ]; then
+    echo "$(date '+%F %T') ALERTE accents-IMPOSSIBLE : reserve de touches epuisee" >> "$L"
+    echo "$(date '+%F %T') accents-IMPOSSIBLE : les accents ne sont plus remappes, verifier la reserve de touches" > "$ICI/ALERTE-ACCENTS.txt"
+    command -v termux-notification >/dev/null && termux-notification --title "HPP accents" --content "ALERTE : reserve de touches epuisee, accents non remappes"
+  else
+    rm -f "$ICI/ALERTE-ACCENTS.txt"
+  fi
+
+  # 2b. Relance de Boston dans son chat si le Gardien voit un silence ou une stagnation.
+  bash "$ICI/relance_boston.sh" >/dev/null 2>&1
 
   # 3. Tunnel et pont.
   if ! vivant cf; then

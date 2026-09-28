@@ -50,7 +50,7 @@ def code_de(d, caractere):
     """
     ks = XK.string_to_keysym(caractere)
     if ks == 0:
-        ks = ord(caractere)
+        ks = {"œ": 0x13BD, "Œ": 0x13BC}.get(caractere, ord(caractere))
     mn = d.display.info.min_keycode
     mx = d.display.info.max_keycode
     rows = d.get_keyboard_mapping(mn, mx - mn + 1)
