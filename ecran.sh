@@ -52,3 +52,4 @@ fi
 
 # Les touches a majuscule sautent apres chaque nouvel ecran.
 python "$(cd "$(dirname "$0")" && pwd)/clavier_hpp.py" --si-besoin 2>&1 | sed 's/^/4. clavier : /'
+python "$(cd "$(dirname "$0")" && pwd)/accents_hpp.py" --si-besoin 2>&1 | sed 's/^/4b. accents : /'
