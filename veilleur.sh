@@ -47,6 +47,9 @@ while true; do
     rm -f "$ICI/ALERTE-ACCENTS.txt"
   fi
 
+  # 2a. Second Firefox reserve aux messages (ecran :98), relance s'il est tombe.
+  bash "$ICI/messagerie.sh" >/dev/null 2>&1
+
   # 2b. Relance de Boston dans son chat si le Gardien voit un silence ou une stagnation.
   bash "$ICI/relance_boston.sh" >/dev/null 2>&1
 

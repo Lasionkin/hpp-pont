@@ -7,16 +7,22 @@
 #   RELANCE_PAUSE_MIN  minutes minimum entre deux relances automatiques (defaut 30)
 #   RELANCE_ESSAI=1    n'ecrit rien, affiche seulement le message (test)
 set -u
-export LANG=C.UTF-8 LC_ALL=C.UTF-8 DISPLAY=:99
+export LANG=C.UTF-8 LC_ALL=C.UTF-8
+# Firefox de messagerie sur :98 (messagerie.sh) ; a defaut, celui du pilote sur :99.
+export DISPLAY="${RELANCE_DISPLAY:-:98}"
+xdotool search --onlyvisible --name "Mozilla Firefox" >/dev/null 2>&1 || export DISPLAY=:99
 SEUIL_MIN="${RELANCE_SEUIL_MIN:-60}"
 PAUSE_MIN="${RELANCE_PAUSE_MIN:-30}"
 D="$HOME/.hpp-pont"; J="$D/relance.log"; DERNIERE="$D/relance.derniere"
 mkdir -p "$D"
+# Pause pendant que Claude utilise le navigateur pour autre chose (ChatGPT, Notion...).
+[ -f "$D/relance.pause" ] && [ -z "${RELANCE_FICHIER:-}" ] && exit 0
 note() { echo "$(date '+%F %T') $*" >> "$J"; }
 
 if [ -n "${RELANCE_FICHIER:-}" ]; then
   [ -s "$RELANCE_FICHIER" ] || { note "consigne absente ou vide : $RELANCE_FICHIER"; echo "consigne absente ou vide"; exit 1; }
   msg=$(tr '\r\n' '  ' < "$RELANCE_FICHIER" | cut -c1-1500)
+  case "$msg" in *"envoyé à"*) ;; *) msg="$msg [Claude, envoyé à $(date '+%Hh%M:%S'), heure de Montréal]" ;; esac
   cause="consigne"; minutes=0; cliquet="-"
 else
   etat="${RELANCE_ETAT_JSON:-$(curl -s -m 20 https://gardien-boston.kasiam-gardien.workers.dev/etat)}"
@@ -38,16 +44,25 @@ else: print("ok 0", cliquet)
   [ "$cause" = "ok" ] && exit 0
   if [ -f "$DERNIERE" ] && [ $(( $(date +%s) - $(cat "$DERNIERE") )) -lt $(( PAUSE_MIN * 60 )) ]; then exit 0; fi
   if [ "$cause" = "silence" ]; then quoi="aucun battement depuis $minutes min"; else quoi="aucun progrès depuis $minutes min"; fi
-  msg="Boston, relance automatique du Gardien, ordre de Seigneur Enock : $cause, $quoi, cliquet $cliquet. Reprends maintenant le critère suivant et donne ici sa preuve (fichier et empreinte)."
+  msg="Claude (Gardien automatique), envoyé à $(date '+%Hh%M:%S'), heure de Montréal, ordre de Seigneur Enock : $cause, $quoi, cliquet $cliquet. Reprends maintenant le critère suivant et donne ici sa preuve (fichier et empreinte)."
 fi
 if [ "${RELANCE_ESSAI:-0}" = "1" ]; then echo "RELANCE: $msg"; exit 0; fi
 
 # La fenetre principale de Firefox, jamais celle des outils de developpement.
-w=""
-for id in $(xdotool search --onlyvisible --name "Mozilla Firefox" 2>/dev/null); do
-  nom=$(xdotool getwindowname "$id" 2>/dev/null)
-  case "$nom" in *"Developer Tools"*) ;; *Boston*) w="$id"; break ;; esac
-done
+chercher() {
+  w=""; principale=""
+  for id in $(xdotool search --onlyvisible --name "Mozilla Firefox" 2>/dev/null); do
+    nom=$(xdotool getwindowname "$id" 2>/dev/null)
+    case "$nom" in *"Developer Tools"*) ;; *Boston*|"Muse — "*) w="$id"; break ;; *) principale="$id" ;; esac
+  done
+}
+chercher
+if [ -z "$w" ] && [ -n "$principale" ]; then
+  # Firefox affiche une autre page : on rouvre le chat de Boston, puis on recherche.
+  # D'abord le premier onglet (muse.ai), sans rien taper.
+  xdotool windowactivate --sync "$principale" 2>/dev/null
+  for k in 1 2 3 4; do xdotool key ctrl+l; sleep 0.2; xdotool key Escape; xdotool key ctrl+Next; sleep 1.2; chercher; [ -n "$w" ] && break; done
+fi
 [ -z "$w" ] && { note "fenetre du chat Boston introuvable : message non envoye ($cause)"; echo "fenetre introuvable"; exit 1; }
 xdotool windowactivate --sync "$w" 2>/dev/null
 eval "$(xdotool getwindowgeometry --shell "$w")"
