@@ -13,14 +13,16 @@ import clavier_hpp as C          # reutilise la connexion Termux au socket X et 
 from Xlib import display
 
 LETTRES = "éèêëàâçùûîïôœÉÈÊÀÇ"
-KEYSYM = {"œ": 0x13BD, "Œ": 0x13BC}        # hors Latin-1 : keysyms X11 dedies
+KEYSYM = {"œ": 0x13BD, "Œ": 0x13BC, "’": 0xAD3}  # hors Latin-1 : keysyms X11 dedies
+# Signes typographiques francais, hors des 18 lettres canoniques : guillemets, apostrophe courbe, Œ.
+SYMBOLES = "«»’Œ"
 
 def keysym(c):
     return KEYSYM.get(c, ord(c))
 
 def manquantes(d):
     mn, rows = C.table(d)
-    return [c for c in LETTRES if C.premiere_touche(rows, mn, keysym(c))[0] is None]
+    return [c for c in LETTRES + SYMBOLES if C.premiere_touche(rows, mn, keysym(c))[0] is None]
 
 def appliquer(d):
     mn, rows = C.table(d)
