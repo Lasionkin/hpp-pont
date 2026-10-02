@@ -80,8 +80,11 @@ SORTIE_MAX = 16384  # 16 Ko
 DELAI_MAX = 300
 # 26/09/2026 : ajout du connecteur de Boston, le Chef d'equipe (agent.meta.ai),
 # approuve par Seigneur Enock. Le code d'approbation reste le seul verrou.
+# 02/10/2026 : ajout du connecteur d'Elixir Dot (ChatGPT), adresse exacte
+# communiquee par Elixir, sur ordre de Seigneur Enock (« Fais ce que Elixir dit »).
 HOSTED_CALLBACKS = {"https://claude.ai/api/mcp/auth_callback", "https://claude.com/api/mcp/auth_callback",
-                      "https://agent.meta.ai/api/hatch/oauth/callback"}
+                      "https://agent.meta.ai/api/hatch/oauth/callback",
+                      "https://chatgpt.com/connector/oauth/SLzSkuNzoSfe"}
 
 _lock = threading.RLock()
 _ecran_lock = threading.RLock()
