@@ -800,7 +800,7 @@ class H(BaseHTTPRequestHandler):
         page = PAGE.format(client=html.escape(c["name"]), host=html.escape(host), warn=warn,
                            err=html.escape(err), hidden=hidden)
         self.send(code, page, "text/html; charset=utf-8",
-                  {"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://claude.ai https://claude.com http://localhost:* http://127.0.0.1:*; frame-ancestors 'none'",
+                  {"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://claude.ai https://claude.com https://chatgpt.com/connector/oauth/SLzSkuNzoSfe http://localhost:* http://127.0.0.1:*; frame-ancestors 'none'",
                    "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer"})
 
     def authorize_post(self):
